@@ -1,4 +1,5 @@
 import Foundation
+import os
 import Testing
 @testable import RelayKeyCore
 
@@ -135,13 +136,10 @@ private struct FakeHealthTransport: HealthTransport {
 }
 
 private final class FakeCommandRunner: CommandRunning, @unchecked Sendable {
-    private let lock = NSLock()
-    private var _callCount = 0
+    private let callCountState = OSAllocatedUnfairLock(initialState: 0)
 
     var callCount: Int {
-        lock.lock()
-        defer { lock.unlock() }
-        return _callCount
+        callCountState.withLock { $0 }
     }
 
     func run(
@@ -149,23 +147,22 @@ private final class FakeCommandRunner: CommandRunning, @unchecked Sendable {
         arguments: [String],
         timeout: Duration
     ) async -> CommandOutcome {
-        lock.lock()
-        _callCount += 1
-        lock.unlock()
+        callCountState.withLock { $0 += 1 }
         return CommandOutcome(exitCode: 0, stderrSnippet: "")
     }
 }
 
 private final class GatedCommandRunner: CommandRunning, @unchecked Sendable {
-    private let lock = NSLock()
-    private var _callCount = 0
-    private var continuation: CheckedContinuation<Void, Never>?
-    private var isReleased = false
+    private struct State {
+        var callCount = 0
+        var continuation: CheckedContinuation<Void, Never>?
+        var isReleased = false
+    }
+
+    private let state = OSAllocatedUnfairLock(initialState: State())
 
     var callCount: Int {
-        lock.lock()
-        defer { lock.unlock() }
-        return _callCount
+        state.withLock { $0.callCount }
     }
 
     func run(
@@ -173,29 +170,30 @@ private final class GatedCommandRunner: CommandRunning, @unchecked Sendable {
         arguments: [String],
         timeout: Duration
     ) async -> CommandOutcome {
-        lock.lock()
-        _callCount += 1
-        lock.unlock()
+        state.withLock { $0.callCount += 1 }
 
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-            lock.lock()
-            if isReleased {
-                lock.unlock()
+            let shouldResumeImmediately = state.withLock { current -> Bool in
+                if current.isReleased {
+                    return true
+                }
+                current.continuation = cont
+                return false
+            }
+            if shouldResumeImmediately {
                 cont.resume()
-            } else {
-                continuation = cont
-                lock.unlock()
             }
         }
         return CommandOutcome(exitCode: 0, stderrSnippet: "")
     }
 
     func release() {
-        lock.lock()
-        isReleased = true
-        let cont = continuation
-        continuation = nil
-        lock.unlock()
+        let cont = state.withLock { current -> CheckedContinuation<Void, Never>? in
+            current.isReleased = true
+            let pending = current.continuation
+            current.continuation = nil
+            return pending
+        }
         cont?.resume()
     }
 }
