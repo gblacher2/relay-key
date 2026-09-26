@@ -73,8 +73,15 @@ struct RelayStoreTests {
         installFakeCLI(in: home)
         let paths = Paths(home: home)
         let gate = GatedCommandRunner()
+        let healthCalls = OSAllocatedUnfairLock(initialState: 0)
         let transport = FakeHealthTransport { _ in
-            let json = #"{"status":"ok","port":8788}"#
+            let count = healthCalls.withLock { value -> Int in
+                value += 1
+                return value
+            }
+            // Distinguish post-action refresh from the initial refresh.
+            let port = count == 1 ? 8788 : 9999
+            let json = #"{"status":"ok","port":\#(port)}"#
             return (Data(json.utf8), 200)
         }
         let controller = RelayController(
@@ -85,6 +92,7 @@ struct RelayStoreTests {
         let store = RelayStore(controller: controller, paths: paths)
         await store.refresh()
         #expect(store.state == .running(port: 8788))
+        #expect(healthCalls.withLock { $0 } == 1)
 
         store.perform(.stop)
         store.perform(.stop)
@@ -99,13 +107,50 @@ struct RelayStoreTests {
 
         gate.release()
         for _ in 0..<50 {
-            if store.activeAction == nil { break }
+            if store.activeAction == nil && store.state == .running(port: 9999) {
+                break
+            }
             try? await Task.sleep(for: .milliseconds(20))
         }
 
         #expect(store.activeAction == nil)
         #expect(gate.callCount == 1)
-        #expect(store.state == .running(port: 8788))
+        #expect(healthCalls.withLock { $0 } == 2)
+        #expect(store.state == .running(port: 9999))
+    }
+
+    @Test("Non-200, bad JSON, and non-ok status map to unhealthy")
+    func unhealthyMappings() async {
+        let home = makeTempHome(prefix: "unhealthy")
+        installFakeCLI(in: home)
+        let paths = Paths(home: home)
+
+        let non200 = RelayController(
+            paths: paths,
+            health: FakeHealthTransport { _ in
+                (Data(#"{"status":"ok","port":8788}"#.utf8), 503)
+            },
+            commands: FakeCommandRunner()
+        )
+        #expect(await non200.currentState() == .unhealthy)
+
+        let badJSON = RelayController(
+            paths: paths,
+            health: FakeHealthTransport { _ in
+                (Data("not-json".utf8), 200)
+            },
+            commands: FakeCommandRunner()
+        )
+        #expect(await badJSON.currentState() == .unhealthy)
+
+        let notOk = RelayController(
+            paths: paths,
+            health: FakeHealthTransport { _ in
+                (Data(#"{"status":"degraded","port":8788}"#.utf8), 200)
+            },
+            commands: FakeCommandRunner()
+        )
+        #expect(await notOk.currentState() == .unhealthy)
     }
 }
 

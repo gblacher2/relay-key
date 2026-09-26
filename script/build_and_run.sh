@@ -88,9 +88,11 @@ case "$MODE" in
     fi
     lsui="$(plutil -extract LSUIElement raw "$CONTENTS_DIR/Info.plist")"
     if [[ "$lsui" != "true" && "$lsui" != "1" ]]; then
+      pkill -x RelayKey 2>/dev/null || true
       echo "LSUIElement is not true (got: $lsui)" >&2
       exit 1
     fi
-    echo "verify ok: RelayKey running, LSUIElement=$lsui"
+    pkill -x RelayKey 2>/dev/null || true
+    echo "verify ok: RelayKey launched, LSUIElement=$lsui"
     ;;
 esac

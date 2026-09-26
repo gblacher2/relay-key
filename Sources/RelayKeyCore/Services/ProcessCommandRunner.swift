@@ -96,10 +96,15 @@ public struct ProcessCommandRunner: CommandRunning {
 
 /// Cancels a scheduled terminate without capturing non-Sendable DispatchWorkItem
 /// across Process.terminationHandler's @Sendable boundary.
+///
+/// `finished` coordinates the timeout item with `terminationHandler`/`cancel()`
+/// under one lock so `terminate()` is never called after the process has already
+/// exited (which raises an uncatchable Obj-C `NSInvalidArgumentException`).
 private final class TimeoutControl: @unchecked Sendable {
     private let lock = NSLock()
     private let process: Process
     private var workItem: DispatchWorkItem?
+    private var finished = false
 
     init(process: Process) {
         self.process = process
@@ -109,10 +114,16 @@ private final class TimeoutControl: @unchecked Sendable {
         let item = DispatchWorkItem { [weak self] in
             guard let self else { return }
             self.lock.lock()
-            let running = self.process.isRunning
-            self.lock.unlock()
-            if running {
-                self.process.terminate()
+            defer { self.lock.unlock() }
+            guard !self.finished else { return }
+            self.finished = true
+            self.workItem = nil
+            // Prefer kill(2) over Process.terminate(): the latter raises an
+            // uncatchable NSInvalidArgumentException if the child already exited
+            // between isRunning and the call. kill returns ESRCH instead.
+            let pid = self.process.processIdentifier
+            if pid > 0, self.process.isRunning {
+                kill(pid, SIGTERM)
             }
         }
         lock.lock()
@@ -123,6 +134,7 @@ private final class TimeoutControl: @unchecked Sendable {
 
     func cancel() {
         lock.lock()
+        finished = true
         workItem?.cancel()
         workItem = nil
         lock.unlock()
