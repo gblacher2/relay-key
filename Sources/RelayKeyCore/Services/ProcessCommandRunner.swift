@@ -19,6 +19,10 @@ public protocol CommandRunning: Sendable {
 }
 
 private let commandCaptureLimit = 8 * 1024
+/// Exit code reported when the runner stops a child for exceeding its timeout.
+private let commandTimeoutExitCode: Int32 = 124
+/// Grace period after SIGTERM before escalating to SIGKILL.
+private let timeoutKillGraceSeconds: Double = 2
 
 public struct ProcessCommandRunner: CommandRunning {
     public init() {}
@@ -55,15 +59,19 @@ public struct ProcessCommandRunner: CommandRunning {
             let completion = OnceContinuation(continuation)
             let timeoutSeconds = Double(timeout.components.seconds)
                 + Double(timeout.components.attoseconds) / 1e18
-            let timeoutControl = TimeoutControl(process: process)
+            let timeoutControl = TimeoutControl(
+                process: process,
+                graceSeconds: timeoutKillGraceSeconds
+            )
 
             process.terminationHandler = { finished in
+                let timedOut = timeoutControl.didTimeOut
                 timeoutControl.cancel()
                 stdoutPipe.fileHandleForReading.readabilityHandler = nil
                 stderrPipe.fileHandleForReading.readabilityHandler = nil
                 completion.resume(
                     CommandOutcome(
-                        exitCode: finished.terminationStatus,
+                        exitCode: timedOut ? commandTimeoutExitCode : finished.terminationStatus,
                         stderrSnippet: drains.stderrString()
                     )
                 )
@@ -94,50 +102,89 @@ public struct ProcessCommandRunner: CommandRunning {
     }
 }
 
-/// Cancels a scheduled terminate without capturing non-Sendable DispatchWorkItem
-/// across Process.terminationHandler's @Sendable boundary.
+/// Soft-timeout → SIGTERM, then hard-timeout → SIGKILL, without capturing
+/// non-Sendable DispatchWorkItem across Process.terminationHandler's @Sendable boundary.
 ///
-/// `finished` coordinates the timeout item with `terminationHandler`/`cancel()`
-/// under one lock so `terminate()` is never called after the process has already
-/// exited (which raises an uncatchable Obj-C `NSInvalidArgumentException`).
+/// `finished` coordinates timer items with `terminationHandler`/`cancel()` so kill(2)
+/// is only attempted while the child may still be alive. `timedOut` is sticky so the
+/// runner can resume with a timeout failure even if the child later exits "normally".
 private final class TimeoutControl: @unchecked Sendable {
     private let lock = NSLock()
     private let process: Process
-    private var workItem: DispatchWorkItem?
+    private let graceSeconds: Double
+    private var softItem: DispatchWorkItem?
+    private var hardItem: DispatchWorkItem?
     private var finished = false
+    private var timedOut = false
 
-    init(process: Process) {
+    init(process: Process, graceSeconds: Double) {
         self.process = process
+        self.graceSeconds = graceSeconds
     }
 
     func schedule(after seconds: Double) {
         let item = DispatchWorkItem { [weak self] in
-            guard let self else { return }
-            self.lock.lock()
-            defer { self.lock.unlock() }
-            guard !self.finished else { return }
-            self.finished = true
-            self.workItem = nil
-            // Prefer kill(2) over Process.terminate(): the latter raises an
-            // uncatchable NSInvalidArgumentException if the child already exited
-            // between isRunning and the call. kill returns ESRCH instead.
-            let pid = self.process.processIdentifier
-            if pid > 0, self.process.isRunning {
-                kill(pid, SIGTERM)
-            }
+            self?.onSoftTimeout()
         }
         lock.lock()
-        workItem = item
+        softItem = item
         lock.unlock()
         DispatchQueue.global().asyncAfter(deadline: .now() + seconds, execute: item)
+    }
+
+    var didTimeOut: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return timedOut
     }
 
     func cancel() {
         lock.lock()
         finished = true
-        workItem?.cancel()
-        workItem = nil
+        softItem?.cancel()
+        softItem = nil
+        hardItem?.cancel()
+        hardItem = nil
         lock.unlock()
+    }
+
+    private func onSoftTimeout() {
+        let hard: DispatchWorkItem?
+        lock.lock()
+        softItem = nil
+        if finished || !process.isRunning {
+            lock.unlock()
+            return
+        }
+        timedOut = true
+        signalIfRunning(SIGTERM)
+        let item = DispatchWorkItem { [weak self] in
+            self?.onHardTimeout()
+        }
+        hardItem = item
+        hard = item
+        lock.unlock()
+        if let hard {
+            DispatchQueue.global().asyncAfter(deadline: .now() + graceSeconds, execute: hard)
+        }
+    }
+
+    private func onHardTimeout() {
+        lock.lock()
+        defer { lock.unlock() }
+        hardItem = nil
+        guard !finished else { return }
+        timedOut = true
+        signalIfRunning(SIGKILL)
+    }
+
+    /// Caller must hold `lock`.
+    private func signalIfRunning(_ signal: Int32) {
+        let pid = process.processIdentifier
+        guard pid > 0, process.isRunning else { return }
+        // kill(2) returns ESRCH if the child already exited; unlike Process.terminate(),
+        // it does not raise an Obj-C exception.
+        kill(pid, signal)
     }
 }
 
