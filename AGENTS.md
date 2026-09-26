@@ -29,11 +29,17 @@ and expect no matches. A failed required check means the task is not complete.
 
 Swift 6 language mode, SwiftPM tools 6.0, macOS 14+, and no dependencies. Keep
 the app menu bar only, with the exact labels, symbols, and order in the plan. Add
-only UI text required there or for operation and accessibility. Never access API
-keys, relay configuration, or LM Studio files. Only GET loopback `/health` and run
-the CLI with `Process` argument arrays for lifecycle actions. Do not call its
-`status` or `logs` subcommands. Logger metadata is limited to state transitions,
-action names, and exit codes. Do not commit absolute home paths or secrets.
+only UI text required there or for operation and accessibility. Do not commit
+absolute home paths or secrets.
+
+## Security
+
+Never access API keys, relay configuration, or LM Studio files. The sole network
+call is GET loopback `/health`; decode only `status` and `port`. Run the CLI with
+`Process` argument arrays for lifecycle actions only. Do not call its `status` or
+`logs` subcommands. `os.Logger` subsystem `local.gabriel.relay-key` records only
+state transitions, action names, and exit codes; never log or display captured
+stderr.
 
 ## GitHub workflow and agent guardrails
 
