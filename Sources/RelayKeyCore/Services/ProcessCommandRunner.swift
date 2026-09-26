@@ -48,43 +48,35 @@ public struct ProcessCommandRunner: CommandRunning {
             process.standardOutput = stdoutPipe
             process.standardError = stderrPipe
 
-            let state = PipeDrainState()
-            attachDrain(pipe: stdoutPipe, into: state)
-            attachDrain(pipe: stderrPipe, into: state, isStdout: false)
+            let drains = PipeDrainState()
+            attachDrain(pipe: stdoutPipe, into: drains, isStdout: true)
+            attachDrain(pipe: stderrPipe, into: drains, isStdout: false)
 
+            let completion = OnceContinuation(continuation)
             let timeoutSeconds = Double(timeout.components.seconds)
                 + Double(timeout.components.attoseconds) / 1e18
-            let timeoutItem = DispatchWorkItem {
-                if process.isRunning {
-                    process.terminate()
-                }
-            }
-            DispatchQueue.global().asyncAfter(
-                deadline: .now() + timeoutSeconds,
-                execute: timeoutItem
-            )
+            let timeoutControl = TimeoutControl(process: process)
 
             process.terminationHandler = { finished in
-                timeoutItem.cancel()
+                timeoutControl.cancel()
                 stdoutPipe.fileHandleForReading.readabilityHandler = nil
                 stderrPipe.fileHandleForReading.readabilityHandler = nil
-                continuation.resume(
-                    returning: CommandOutcome(
+                completion.resume(
+                    CommandOutcome(
                         exitCode: finished.terminationStatus,
-                        stderrSnippet: state.stderrString()
+                        stderrSnippet: drains.stderrString()
                     )
                 )
             }
 
             do {
                 try process.run()
+                timeoutControl.schedule(after: timeoutSeconds)
             } catch {
-                timeoutItem.cancel()
+                timeoutControl.cancel()
                 stdoutPipe.fileHandleForReading.readabilityHandler = nil
                 stderrPipe.fileHandleForReading.readabilityHandler = nil
-                continuation.resume(
-                    returning: CommandOutcome(exitCode: 127, stderrSnippet: "")
-                )
+                completion.resume(CommandOutcome(exitCode: 127, stderrSnippet: ""))
             }
         }
     }
@@ -92,13 +84,65 @@ public struct ProcessCommandRunner: CommandRunning {
     private func attachDrain(
         pipe: Pipe,
         into state: PipeDrainState,
-        isStdout: Bool = true
+        isStdout: Bool
     ) {
         pipe.fileHandleForReading.readabilityHandler = { handle in
             let data = handle.availableData
             guard !data.isEmpty else { return }
             state.append(data, isStdout: isStdout)
         }
+    }
+}
+
+/// Cancels a scheduled terminate without capturing non-Sendable DispatchWorkItem
+/// across Process.terminationHandler's @Sendable boundary.
+private final class TimeoutControl: @unchecked Sendable {
+    private let lock = NSLock()
+    private let process: Process
+    private var workItem: DispatchWorkItem?
+
+    init(process: Process) {
+        self.process = process
+    }
+
+    func schedule(after seconds: Double) {
+        let item = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.lock.lock()
+            let running = self.process.isRunning
+            self.lock.unlock()
+            if running {
+                self.process.terminate()
+            }
+        }
+        lock.lock()
+        workItem = item
+        lock.unlock()
+        DispatchQueue.global().asyncAfter(deadline: .now() + seconds, execute: item)
+    }
+
+    func cancel() {
+        lock.lock()
+        workItem?.cancel()
+        workItem = nil
+        lock.unlock()
+    }
+}
+
+private final class OnceContinuation: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<CommandOutcome, Never>?
+
+    init(_ continuation: CheckedContinuation<CommandOutcome, Never>) {
+        self.continuation = continuation
+    }
+
+    func resume(_ outcome: CommandOutcome) {
+        lock.lock()
+        let cont = continuation
+        continuation = nil
+        lock.unlock()
+        cont?.resume(returning: outcome)
     }
 }
 
