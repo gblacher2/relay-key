@@ -109,7 +109,7 @@ If menu bar interaction cannot be automated, identify the exact unverified manua
 ## Constraints
 
 - Implement on `feat/menu-bar-control` from `main` with an early draft PR linked to the Issue. Commit and push sensible checkpoints. Keep the PR draft pending independent review.
-- The implementer is Luna. Return material architecture or scope questions in the PR rather than changing this plan unilaterally.
+- The implementer is Claude. Return material architecture or scope questions in the PR rather than changing this plan unilaterally.
 - Follow repository and workspace instructions, including risk-based testing and source review before commits.
 
 ## Out of scope
