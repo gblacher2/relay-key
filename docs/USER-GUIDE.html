@@ -27,13 +27,25 @@
     code, pre { font-family: inherit; }
     code { overflow-wrap: anywhere; }
     pre { overflow-x: auto; padding: .8rem 1rem; border: 1px solid #353535; background: #191919; }
-    .table-wrap { overflow-x: auto; border: 1px solid #353535; }
+    .table-wrap { overflow-x: auto; border: 1px solid #353535; -webkit-overflow-scrolling: touch; }
     table { border-collapse: collapse; width: 100%; min-width: 34rem; }
     th, td { padding: .7rem .8rem; border-bottom: 1px solid #353535; text-align: left; vertical-align: top; }
     tbody tr:last-child th, tbody tr:last-child td { border-bottom: 0; }
     thead { background: #1b1b1b; color: #bdbdbd; }
     tbody th { font-weight: 600; }
+    .note { max-width: none; padding: .9rem 1rem; border: 1px solid #424242; background: #191919; }
+    .role-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; border: 1px solid #353535; background: #353535; margin: 1.5rem 0; }
+    .role { min-width: 0; padding: 1.1rem; background: #151515; }
+    .role-label { color: #a3a3a3; font-size: .78rem; text-transform: uppercase; letter-spacing: .08em; }
+    .role h3 { margin: .45rem 0 .25rem; font-size: 1.12rem; line-height: 1.3; }
+    .role p { margin: .5rem 0; color: #bdbdbd; }
+    .role code { display: block; color: #c5f277; font-size: .83rem; }
+    .model-table { min-width: 46rem; }
+    .model-table td:nth-child(3), .model-table td:nth-child(4) { white-space: nowrap; font-variant-numeric: tabular-nums; }
+    caption { padding: .7rem .8rem; text-align: left; color: #a3a3a3; font-size: .8rem; }
+    .scroll-hint { display: none; color: #a3a3a3; font-size: .8rem; }
     @media (max-width: 640px) { .topbar { align-items: flex-start; flex-direction: column; } main { padding-top: 2rem; } }
+    @media (max-width: 700px) { .role-grid { grid-template-columns: 1fr; } .scroll-hint { display: block; } }
     @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
   </style>
 </head>
@@ -51,6 +63,7 @@
       <ul>
         <li><a href="#open">Open RelayKey</a></li>
         <li><a href="#controls">Menu controls</a></li>
+        <li><a href="#models">Go model cheat sheet</a></li>
         <li><a href="#troubleshooting">Troubleshooting</a></li>
         <li><a href="#update">Update or remove</a></li>
       </ul>
@@ -74,6 +87,47 @@
         <tr><th scope="row">Quit</th><td>Closes RelayKey, leaving the relay in its current state.</td></tr>
       </tbody>
     </table></div>
+
+    <h2 id="models">OpenCode Go model cheat sheet</h2>
+    <p class="eyebrow">Checked 27 September 2026 · OpenCode Go</p>
+    <p>Choose a model in OpenCode with <code>/models</code>. RelayKey controls the local relay; it does not select or configure OpenCode models.</p>
+    <p class="note">Go costs $10/month. The dollar figures below are <strong>per-model included usage limits</strong>, not separate subscription prices. Request counts are OpenCode estimates based on a typical traffic mix; real usage and availability can change. Check the <a href="https://opencode.ai/docs/go/#estimated-requests">current Go table</a> and your console before planning around a limit.</p>
+
+    <div class="role-grid" aria-label="Recommended model roles">
+      <div class="role"><div class="role-label">01 / Daily</div><h3>MiMo-V2.6-Flash</h3><code>opencode-go/mimo-v2.6-flash</code><p>High-volume default for ordinary agent work. Move up when a task needs deeper reasoning.</p></div>
+      <div class="role"><div class="role-label">02 / Build</div><h3>MiniMax M3</h3><code>opencode-go/minimax-m3</code><p>Implementation, refactors, and test writing. Use a separate reviewer for consequential changes.</p></div>
+      <div class="role"><div class="role-label">03 / Plan</div><h3>MiMo-V2.6-Pro</h3><code>opencode-go/mimo-v2.6-pro</code><p>Harder design and debugging. Artificial Analysis reports an Intelligence Index of 46 for the model.</p></div>
+      <div class="role"><div class="role-label">04 / Review</div><h3>GLM-5.3</h3><code>opencode-go/glm-5.3</code><p>Use a different model family to challenge a plan or inspect a completed change; reserve its smaller quota.</p></div>
+      <div class="role"><div class="role-label">05 / Free</div><h3>Space Bunny Free</h3><code>opencode-go/space-bunny-free</code><p>Temporary fallback for disposable tasks. OpenCode calls it an anonymous model and says the free offer is limited time.</p></div>
+    </div>
+
+    <p class="scroll-hint">Swipe the table sideways to see the limits →</p>
+    <div class="table-wrap"><table class="model-table">
+      <caption>Selected OpenCode Go limits as listed on 27 September 2026</caption>
+      <thead><tr><th scope="col">Model</th><th scope="col">Use</th><th scope="col">Est. req / 5 h</th><th scope="col">Monthly cap</th></tr></thead>
+      <tbody>
+        <tr><th scope="row">MiMo-V2.6-Flash</th><td>Daily volume</td><td>30,100</td><td>$60</td></tr>
+        <tr><th scope="row">MiniMax M3</th><td>Build</td><td>3,200</td><td>$60</td></tr>
+        <tr><th scope="row">MiMo-V2.6-Pro</th><td>Plan / hard</td><td>3,250</td><td>$15</td></tr>
+        <tr><th scope="row">GLM-5.3</th><td>Independent review</td><td>220</td><td>$15</td></tr>
+        <tr><th scope="row">Kimi K3</th><td>Occasional long reasoning</td><td>110</td><td>$15</td></tr>
+        <tr><th scope="row">Kimi K2.7 Code</th><td>Code-focused alternative</td><td>1,350</td><td>$60</td></tr>
+        <tr><th scope="row">DeepSeek V4.1 Flash</th><td>High-volume alternative</td><td>26,000</td><td>$60</td></tr>
+        <tr><th scope="row">Space Bunny Free</th><td>Temporary fallback</td><td>Unlimited*</td><td>Free*</td></tr>
+      </tbody>
+    </table></div>
+    <p><small>* OpenCode labels Space Bunny Free a limited-time offer. The published request counts are estimates, not guaranteed request allowances. Go also applies five-hour and weekly spend limits. <a href="https://opencode.ai/docs/go/#usage-limits">Limits and methodology</a>.</small></p>
+
+    <h3>When to switch</h3>
+    <ul>
+      <li>Keep <strong>MiMo Flash</strong> or <strong>MiniMax M3</strong> for routine work; move to <strong>MiMo Pro</strong> when the first pass stalls or the design matters.</li>
+      <li>Use <strong>GLM-5.3</strong> or <strong>Kimi K3</strong> for a second opinion rather than as an always-on default. Their five-hour estimates are 220 and 110 requests.</li>
+      <li><strong>Qwen3.8 Max</strong> and <strong>Grok 4.7</strong> are other scarce options at 160 and 169 estimated requests per five hours. Keep them for a specific comparison, not routine turns.</li>
+      <li><strong>DeepSeek V4.1 Flash</strong> currently has a high listed allowance; confirm it in the console before relying on it because Go limits can change.</li>
+      <li><strong>MiniMax M2.7</strong> remains available, but <a href="https://artificialanalysis.ai/models/minimax-m2-7">Artificial Analysis now marks it deprecated</a> and points to M3.</li>
+    </ul>
+    <p class="note"><strong>Privacy:</strong> OpenCode lists no model training and zero-day retention for the recommended paid MiMo, MiniMax, and GLM models. DeepSeek's zero-retention agreement is listed only through 30 September 2026. Muse Spark 1.3 <em>Contributor</em> permits Meta to train on prompts and completions and is region-limited, so it is not a default here. Grok 4.7 is listed with 30-day retention. Treat Space Bunny's undisclosed identity and temporary availability as reasons to use it only for low-stakes material. <a href="https://opencode.ai/docs/go/#privacy">Go privacy table</a>.</p>
+    <p><small>Artificial Analysis scores describe model variants tested by Artificial Analysis, not the exact performance of a Go-hosted coding session. Its current pages report <a href="https://artificialanalysis.ai/models/mimo-v2-6-pro">46 for MiMo-V2.6-Pro</a> and <a href="https://artificialanalysis.ai/models/minimax-m3">29 for MiniMax M3</a>. Model IDs were checked against OpenCode's <a href="https://opencode.ai/zen/go/v1/models">live Go model list</a>.</small></p>
 
     <h2 id="troubleshooting">Troubleshooting</h2>
     <div class="table-wrap"><table>
