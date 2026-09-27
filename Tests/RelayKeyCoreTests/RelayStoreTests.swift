@@ -188,6 +188,7 @@ struct RelayStoreTests {
             try? await Task.sleep(for: .milliseconds(10))
         }
         #expect(gate.callCount == 1)
+        #expect(gate.lastArguments == ["model", "set", "mimo-v2.6-flash"])
         gate.release()
         for _ in 0..<50 {
             if !store.isSelectingModel { break }
@@ -263,6 +264,32 @@ struct RelayStoreTests {
         #expect(store.modelSelection?.selected == "mimo-v2.6-flash")
         #expect(!store.modelSelectionFailed)
     }
+
+    @Test("Clear sends typed arguments and rejects mismatched health readback")
+    @MainActor
+    func clearModelRequiresReadback() async {
+        let home = makeTempHome(prefix: "model-clear")
+        installFakeCLI(in: home)
+        let paths = Paths(home: home)
+        let runner = FakeCommandRunner()
+        let transport = FakeHealthTransport { _ in
+            let json = #"{"status":"ok","port":8788,"model_selection":{"version":1,"selected":"glm-5.3","models":["glm-5.3"],"error":null}}"#
+            return (Data(json.utf8), 200)
+        }
+        let store = RelayStore(
+            controller: RelayController(paths: paths, health: transport, commands: runner),
+            paths: paths
+        )
+        await store.refresh()
+        store.selectModel(nil)
+        for _ in 0..<50 {
+            if !store.isSelectingModel { break }
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(runner.lastArguments == ["model", "clear"])
+        #expect(store.modelSelection?.selected == "glm-5.3")
+        #expect(store.modelSelectionFailed)
+    }
 }
 
 private func makeTempHome(prefix: String) -> URL {
@@ -292,7 +319,11 @@ private struct FakeHealthTransport: HealthTransport {
 }
 
 private final class FakeCommandRunner: CommandRunning, @unchecked Sendable {
-    private let callCountState = OSAllocatedUnfairLock(initialState: 0)
+    private struct State {
+        var callCount = 0
+        var lastArguments: [String] = []
+    }
+    private let state = OSAllocatedUnfairLock(initialState: State())
     private let exitCode: Int32
 
     init(exitCode: Int32 = 0) {
@@ -300,7 +331,11 @@ private final class FakeCommandRunner: CommandRunning, @unchecked Sendable {
     }
 
     var callCount: Int {
-        callCountState.withLock { $0 }
+        state.withLock { $0.callCount }
+    }
+
+    var lastArguments: [String] {
+        state.withLock { $0.lastArguments }
     }
 
     func run(
@@ -308,7 +343,10 @@ private final class FakeCommandRunner: CommandRunning, @unchecked Sendable {
         arguments: [String],
         timeout: Duration
     ) async -> CommandOutcome {
-        callCountState.withLock { $0 += 1 }
+        state.withLock {
+            $0.callCount += 1
+            $0.lastArguments = arguments
+        }
         return CommandOutcome(exitCode: exitCode, stderrSnippet: "")
     }
 }
@@ -316,6 +354,7 @@ private final class FakeCommandRunner: CommandRunning, @unchecked Sendable {
 private final class GatedCommandRunner: CommandRunning, @unchecked Sendable {
     private struct State {
         var callCount = 0
+        var lastArguments: [String] = []
         var continuation: CheckedContinuation<Void, Never>?
         var isReleased = false
     }
@@ -326,12 +365,19 @@ private final class GatedCommandRunner: CommandRunning, @unchecked Sendable {
         state.withLock { $0.callCount }
     }
 
+    var lastArguments: [String] {
+        state.withLock { $0.lastArguments }
+    }
+
     func run(
         _ executable: URL,
         arguments: [String],
         timeout: Duration
     ) async -> CommandOutcome {
-        state.withLock { $0.callCount += 1 }
+        state.withLock {
+            $0.callCount += 1
+            $0.lastArguments = arguments
+        }
 
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
             let shouldResumeImmediately = state.withLock { current -> Bool in
