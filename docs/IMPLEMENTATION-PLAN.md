@@ -1,5 +1,7 @@
 # RelayKey implementation plan
 
+Tracking Issue: https://github.com/gblacher2/relay-key/issues/1
+
 ## Objective
 
 Build a native macOS 14+ menu bar utility to monitor and control the already installed `oc-relay` service. This plan is the implementation contract for the initial PR. A separate review context will review that PR after the implementer finishes.

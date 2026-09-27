@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RelayKey User Guide</title>
+  <style>
+    :root { color-scheme: light dark; font: 16px/1.55 system-ui, -apple-system, sans-serif; }
+    body { max-width: 48rem; margin: 2rem auto; padding: 0 1.25rem 3rem; }
+    h1, h2 { line-height: 1.2; }
+    h2 { margin-top: 2rem; border-top: 1px solid color-mix(in srgb, currentColor 22%, transparent); padding-top: 1rem; }
+    a { color: LinkText; }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    code { overflow-wrap: anywhere; }
+    pre { overflow-x: auto; padding: .75rem 1rem; border: 1px solid color-mix(in srgb, currentColor 22%, transparent); border-radius: .5rem; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { padding: .5rem .7rem; border-bottom: 1px solid color-mix(in srgb, currentColor 22%, transparent); text-align: left; vertical-align: top; }
+    th { white-space: nowrap; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>RelayKey User Guide</h1>
+    <p>RelayKey controls the local <code>oc-relay</code> service from the macOS menu bar. It has no Dock icon or main window. Quitting RelayKey does not stop the relay.</p>
+
+    <nav aria-label="Guide sections">
+      <ul>
+        <li><a href="#open">Open RelayKey</a></li>
+        <li><a href="#controls">Menu controls</a></li>
+        <li><a href="#troubleshooting">Troubleshooting</a></li>
+        <li><a href="#update">Update or remove</a></li>
+      </ul>
+    </nav>
+
+    <h2 id="open">Open RelayKey</h2>
+    <p>Open <code>~/Applications/RelayKey.app</code> in Finder, or run:</p>
+    <pre><code>open "$HOME/Applications/RelayKey.app"</code></pre>
+    <p>Click its menu bar icon to see the relay status and controls. A filled bolt in a circle means the relay is running. RelayKey checks status every five seconds; use <strong>Refresh</strong> to check immediately.</p>
+
+    <h2 id="controls">Menu controls</h2>
+    <table>
+      <thead><tr><th scope="col">Control</th><th scope="col">What it does</th></tr></thead>
+      <tbody>
+        <tr><th scope="row">Start</th><td>Starts the stopped local relay.</td></tr>
+        <tr><th scope="row">Stop</th><td>Stops the running local relay.</td></tr>
+        <tr><th scope="row">Restart</th><td>Restarts the running local relay.</td></tr>
+        <tr><th scope="row">Refresh</th><td>Checks the current relay health now.</td></tr>
+        <tr><th scope="row">Copy Base URL</th><td>Copies exactly <code>http://127.0.0.1:8788</code>.</td></tr>
+        <tr><th scope="row">Open Log</th><td>Opens <code>~/Library/Logs/oc-relay.log</code>. The control is disabled when the file does not exist.</td></tr>
+        <tr><th scope="row">Quit</th><td>Closes RelayKey, leaving the relay in its current state.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="troubleshooting">Troubleshooting</h2>
+    <table>
+      <thead><tr><th scope="col">What you see</th><th scope="col">What to do</th></tr></thead>
+      <tbody>
+        <tr><th scope="row">No menu bar icon</th><td>Open the app using the command above. RelayKey does not appear in the Dock. If the icon still does not appear, check whether the app is running with <code>pgrep -x RelayKey</code>.</td></tr>
+        <tr><th scope="row">Stopped</th><td>Choose <strong>Start</strong>, then wait for <strong>Running · Port 8788</strong>.</td></tr>
+        <tr><th scope="row">Not Installed</th><td>RelayKey cannot find an executable <code>~/.local/bin/oc-relay</code>. Check with <code>test -x "$HOME/.local/bin/oc-relay"</code>; install or repair the relay CLI before using Start.</td></tr>
+        <tr><th scope="row">Relay Unhealthy</th><td>Choose <strong>Refresh</strong>. If it remains unhealthy, check the service with the status command below and inspect the local log using <strong>Open Log</strong>.</td></tr>
+        <tr><th scope="row">Start, Stop, or Restart Failed · Exit N</th><td>Choose <strong>Refresh</strong> to check the current state. If the action still fails, check the service status and local log. A timeout may appear as exit 124.</td></tr>
+        <tr><th scope="row">Open Log is disabled</th><td>The log file does not exist at <code>~/Library/Logs/oc-relay.log</code>. Check that the relay CLI is installed and has been run.</td></tr>
+      </tbody>
+    </table>
+    <p>To check the service without printing recent log lines:</p>
+    <pre><code>"$HOME/.local/bin/oc-relay" status | grep -E '^(Service|Health):'</code></pre>
+    <p>Keep API keys, relay configuration, and log contents out of screenshots and support messages.</p>
+
+    <h2 id="update">Update or remove</h2>
+    <p>The installed copy is <code>~/Applications/RelayKey.app</code>. Updating it requires a new build from the RelayKey repository and replacement of that app bundle. Quit RelayKey before replacing it, then open the new copy. Removing the app does not remove or stop <code>oc-relay</code>.</p>
+  </main>
+</body>
+</html>

@@ -6,3 +6,5 @@ service. Implementation is planned in [docs/IMPLEMENTATION-PLAN.md](docs/IMPLEME
 After implementation, build with `swift build`, test with `swift test`, and run
 the staged app with `./script/build_and_run.sh`. The service CLI is expected at
 `~/.local/bin/oc-relay`.
+
+See the [RelayKey user guide](docs/USER-GUIDE.html) for menu controls and troubleshooting.
