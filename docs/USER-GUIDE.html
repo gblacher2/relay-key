@@ -133,6 +133,7 @@
     <p><small>Artificial Analysis scores describe model variants tested by Artificial Analysis, not the exact performance of a Go-hosted coding session. Its current pages report <a href="https://artificialanalysis.ai/models/mimo-v2-6-pro">46 for MiMo-V2.6-Pro</a> and <a href="https://artificialanalysis.ai/models/minimax-m3">29 for MiniMax M3</a>. Model IDs were checked against OpenCode's <a href="https://opencode.ai/zen/go/v1/models">live Go model list</a>.</small></p>
 
     <h2 id="model-picker">Choose a model</h2>
+    <p>In LM Studio, keep <strong>Use Custom Model</strong> selected and enter a valid Chat Completions ID in <strong>Custom Model</strong>, such as <code>mimo-v2.6-flash</code>. LM Studio requires this field before it sends a request. RelayKey overrides that ID when a global model is selected.</p>
     <p>Open <strong>Model (global)</strong> and choose a model. The checkmark appears after the relay confirms the change. The choice affects future requests from every client using this relay, including later turns of an existing LM Studio chat. It does not change LM Studio's visible Custom Model setting or interrupt a response already streaming.</p>
     <p>Choose <strong>Use client model</strong> to return to the model sent by LM Studio. The choice persists across relay restarts. This menu lists only models that OpenCode Go documents for Chat Completions; listing a model does not confirm access on your account. See the <a href="https://opencode.ai/docs/go/#endpoints">Go endpoint table</a>.</p>
 
@@ -148,6 +149,7 @@
         <tr><th scope="row">Open Log is disabled</th><td>The log file does not exist at <code>~/Library/Logs/oc-relay.log</code>. Check that the relay CLI is installed and has been run.</td></tr>
         <tr><th scope="row">Model menu says Unavailable</th><td>Start the relay and install a version of <code>oc-relay</code> with model-selection support. The menu stays unavailable with older versions or invalid selection state.</td></tr>
         <tr><th scope="row">Model change failed</th><td>Choose <strong>Refresh</strong> and check the selected ID with <code>oc-relay model show --json</code>. The menu does not show a new choice until the relay confirms it.</td></tr>
+        <tr><th scope="row">LM Studio says “Missing custom model”</th><td>Choose <strong>Use Custom Model</strong> in LM Studio and enter a valid Chat Completions ID in <strong>Custom Model</strong>. The field must be filled even when RelayKey has a global model selected.</td></tr>
       </tbody>
     </table></div>
     <p>To check the service without printing recent log lines:</p>
