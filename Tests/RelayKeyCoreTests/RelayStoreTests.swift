@@ -24,6 +24,7 @@ struct RelayStoreTests {
 
         let state = await controller.currentState()
         #expect(state == .running(port: 8788))
+        #expect(await controller.currentSnapshot().modelSelection == nil)
     }
 
     @Test("Cannot connect maps to stopped")
@@ -152,6 +153,143 @@ struct RelayStoreTests {
         )
         #expect(await notOk.currentState() == .unhealthy)
     }
+
+    @Test("Model choice waits for CLI and health readback while blocking lifecycle actions")
+    @MainActor
+    func modelChoiceIsConfirmedAndSerialized() async {
+        let home = makeTempHome(prefix: "model-choice")
+        installFakeCLI(in: home)
+        let paths = Paths(home: home)
+        let gate = GatedCommandRunner()
+        let healthCalls = OSAllocatedUnfairLock(initialState: 0)
+        let transport = FakeHealthTransport { _ in
+            let count = healthCalls.withLock { value -> Int in
+                value += 1
+                return value
+            }
+            let selected = count == 1 ? "null" : #""mimo-v2.6-flash""#
+            let json = #"{"status":"ok","port":8788,"model_selection":{"version":1,"selected":\#(selected),"models":["mimo-v2.6-flash","glm-5.3"],"error":null}}"#
+            return (Data(json.utf8), 200)
+        }
+        let store = RelayStore(
+            controller: RelayController(paths: paths, health: transport, commands: gate),
+            paths: paths
+        )
+        await store.refresh()
+        #expect(store.canSelectModel)
+        #expect(store.modelSelection?.selected == nil)
+
+        store.selectModel("mimo-v2.6-flash")
+        store.perform(.stop)
+        #expect(store.isSelectingModel)
+        #expect(!store.canSelectModel)
+        for _ in 0..<50 {
+            if gate.callCount == 1 { break }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(gate.callCount == 1)
+        #expect(gate.lastArguments == ["model", "set", "mimo-v2.6-flash"])
+        gate.release()
+        for _ in 0..<50 {
+            if !store.isSelectingModel { break }
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(store.modelSelection?.selected == "mimo-v2.6-flash")
+        #expect(!store.modelSelectionFailed)
+        #expect(healthCalls.withLock { $0 } == 2)
+    }
+
+    @Test("Failed model command preserves the previous selection")
+    @MainActor
+    func failedModelChoicePreservesSelection() async {
+        let home = makeTempHome(prefix: "model-failure")
+        installFakeCLI(in: home)
+        let paths = Paths(home: home)
+        let runner = FakeCommandRunner(exitCode: 1)
+        let transport = FakeHealthTransport { _ in
+            let json = #"{"status":"ok","port":8788,"model_selection":{"version":1,"selected":"glm-5.3","models":["mimo-v2.6-flash","glm-5.3"],"error":null}}"#
+            return (Data(json.utf8), 200)
+        }
+        let store = RelayStore(
+            controller: RelayController(paths: paths, health: transport, commands: runner),
+            paths: paths
+        )
+        await store.refresh()
+        store.selectModel("mimo-v2.6-flash")
+        for _ in 0..<50 {
+            if !store.isSelectingModel { break }
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(store.modelSelectionFailed)
+        #expect(store.modelSelection?.selected == "glm-5.3")
+        #expect(runner.callCount == 1)
+    }
+
+    @Test("A late health refresh cannot undo a confirmed model selection")
+    @MainActor
+    func staleRefreshCannotUndoModelChoice() async {
+        let home = makeTempHome(prefix: "model-stale")
+        installFakeCLI(in: home)
+        let paths = Paths(home: home)
+        let calls = OSAllocatedUnfairLock(initialState: 0)
+        let transport = FakeHealthTransport { _ in
+            let count = calls.withLock { value -> Int in
+                value += 1
+                return value
+            }
+            if count == 2 {
+                try? await Task.sleep(for: .milliseconds(200))
+            }
+            let selected = count >= 3 ? #""mimo-v2.6-flash""# : "null"
+            let json = #"{"status":"ok","port":8788,"model_selection":{"version":1,"selected":\#(selected),"models":["mimo-v2.6-flash"],"error":null}}"#
+            return (Data(json.utf8), 200)
+        }
+        let store = RelayStore(
+            controller: RelayController(
+                paths: paths, health: transport, commands: FakeCommandRunner()
+            ), paths: paths
+        )
+        await store.refresh()
+        let pending = Task { await store.refresh() }
+        for _ in 0..<50 {
+            if calls.withLock({ $0 }) >= 2 { break }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        store.selectModel("mimo-v2.6-flash")
+        for _ in 0..<50 {
+            if !store.isSelectingModel { break }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        await pending.value
+        #expect(store.modelSelection?.selected == "mimo-v2.6-flash")
+        #expect(!store.modelSelectionFailed)
+    }
+
+    @Test("Clear sends typed arguments and rejects mismatched health readback")
+    @MainActor
+    func clearModelRequiresReadback() async {
+        let home = makeTempHome(prefix: "model-clear")
+        installFakeCLI(in: home)
+        let paths = Paths(home: home)
+        let runner = FakeCommandRunner()
+        let transport = FakeHealthTransport { _ in
+            let json = #"{"status":"ok","port":8788,"model_selection":{"version":1,"selected":"glm-5.3","models":["glm-5.3"],"error":null}}"#
+            return (Data(json.utf8), 200)
+        }
+        let store = RelayStore(
+            controller: RelayController(paths: paths, health: transport, commands: runner),
+            paths: paths
+        )
+        await store.refresh()
+        store.selectModel(nil)
+        for _ in 0..<50 {
+            if !store.isSelectingModel { break }
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(runner.lastArguments == ["model", "clear"])
+        #expect(store.modelSelection?.selected == "glm-5.3")
+        #expect(store.modelSelectionFailed)
+    }
 }
 
 private func makeTempHome(prefix: String) -> URL {
@@ -181,10 +319,23 @@ private struct FakeHealthTransport: HealthTransport {
 }
 
 private final class FakeCommandRunner: CommandRunning, @unchecked Sendable {
-    private let callCountState = OSAllocatedUnfairLock(initialState: 0)
+    private struct State {
+        var callCount = 0
+        var lastArguments: [String] = []
+    }
+    private let state = OSAllocatedUnfairLock(initialState: State())
+    private let exitCode: Int32
+
+    init(exitCode: Int32 = 0) {
+        self.exitCode = exitCode
+    }
 
     var callCount: Int {
-        callCountState.withLock { $0 }
+        state.withLock { $0.callCount }
+    }
+
+    var lastArguments: [String] {
+        state.withLock { $0.lastArguments }
     }
 
     func run(
@@ -192,14 +343,18 @@ private final class FakeCommandRunner: CommandRunning, @unchecked Sendable {
         arguments: [String],
         timeout: Duration
     ) async -> CommandOutcome {
-        callCountState.withLock { $0 += 1 }
-        return CommandOutcome(exitCode: 0, stderrSnippet: "")
+        state.withLock {
+            $0.callCount += 1
+            $0.lastArguments = arguments
+        }
+        return CommandOutcome(exitCode: exitCode, stderrSnippet: "")
     }
 }
 
 private final class GatedCommandRunner: CommandRunning, @unchecked Sendable {
     private struct State {
         var callCount = 0
+        var lastArguments: [String] = []
         var continuation: CheckedContinuation<Void, Never>?
         var isReleased = false
     }
@@ -210,12 +365,19 @@ private final class GatedCommandRunner: CommandRunning, @unchecked Sendable {
         state.withLock { $0.callCount }
     }
 
+    var lastArguments: [String] {
+        state.withLock { $0.lastArguments }
+    }
+
     func run(
         _ executable: URL,
         arguments: [String],
         timeout: Duration
     ) async -> CommandOutcome {
-        state.withLock { $0.callCount += 1 }
+        state.withLock {
+            $0.callCount += 1
+            $0.lastArguments = arguments
+        }
 
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
             let shouldResumeImmediately = state.withLock { current -> Bool in

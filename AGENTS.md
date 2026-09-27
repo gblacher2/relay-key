@@ -9,7 +9,7 @@ service. The implementation contract is [docs/IMPLEMENTATION-PLAN.md](docs/IMPLE
 
 Keep a Foundation and Observation only `RelayKeyCore` library separate from the
 SwiftUI and AppKit `RelayKey` executable. The library owns paths, health mapping,
-process execution, and observable state. The executable owns the menu, pasteboard,
+safe model-selection readback, process execution, and observable state. The executable owns the menu, pasteboard,
 log opening, and app lifecycle. Inject health and command dependencies for tests.
 
 ## Development
@@ -28,17 +28,20 @@ and expect no matches. A failed required check means the task is not complete.
 ## Coding conventions
 
 Swift 6 language mode, SwiftPM tools 6.0, macOS 14+, and no dependencies. Keep
-the app menu bar only, with the exact labels, symbols, and order in the plan. Add
+the app menu bar only, with the initial labels and order in the plan plus the
+`Model (global)` submenu specified in Issue #5. Add
 only UI text required there or for operation and accessibility. Do not commit
 absolute home paths or secrets.
 
 ## Security
 
 Never access API keys, relay configuration, or LM Studio files. The sole network
-call is GET loopback `/health`; decode only `status` and `port`. Run the CLI with
-`Process` argument arrays for lifecycle actions only. Do not call its `status` or
+call is GET loopback `/health`; decode only `status`, `port`, and the safe
+`model_selection` capability, catalog, selected ID, and error. Run the CLI with
+`Process` argument arrays for lifecycle and typed `model set/clear` actions only.
+Do not call its `status` or
 `logs` subcommands. `os.Logger` subsystem `local.gabriel.relay-key` records only
-state transitions, action names, and exit codes; never log or display captured
+state transitions, action names, and exit codes; never log model IDs or display captured
 stderr.
 
 ## GitHub workflow and agent guardrails
