@@ -33,6 +33,44 @@ struct RelayMenu: View {
         }
         .disabled(!store.canRefresh)
 
+        Menu("Model (global)") {
+            if store.isSelectingModel {
+                Text("Selecting…").disabled(true)
+            }
+            if store.modelSelectionFailed {
+                Text("Model change failed").disabled(true)
+            }
+            if let selection = store.modelSelection, selection.isAvailable {
+                Button {
+                    store.selectModel(nil)
+                } label: {
+                    if selection.selected == nil {
+                        Label("Use client model", systemImage: "checkmark")
+                    } else {
+                        Text("Use client model")
+                    }
+                }
+                .disabled(!store.canSelectModel)
+
+                Divider()
+
+                ForEach(selection.models, id: \.self) { model in
+                    Button {
+                        store.selectModel(model)
+                    } label: {
+                        if selection.selected == model {
+                            Label(model, systemImage: "checkmark")
+                        } else {
+                            Text(model)
+                        }
+                    }
+                    .disabled(!store.canSelectModel)
+                }
+            } else {
+                Text("Unavailable").disabled(true)
+            }
+        }
+
         Button("Copy Base URL") {
             let pasteboard = NSPasteboard.general
             pasteboard.clearContents()

@@ -27,6 +27,7 @@
       <ul>
         <li><a href="#open">Open RelayKey</a></li>
         <li><a href="#controls">Menu controls</a></li>
+        <li><a href="#model-picker">Choose a model</a></li>
         <li><a href="#troubleshooting">Troubleshooting</a></li>
         <li><a href="#update">Update or remove</a></li>
       </ul>
@@ -45,11 +46,16 @@
         <tr><th scope="row">Stop</th><td>Stops the running local relay.</td></tr>
         <tr><th scope="row">Restart</th><td>Restarts the running local relay.</td></tr>
         <tr><th scope="row">Refresh</th><td>Checks the current relay health now.</td></tr>
+        <tr><th scope="row">Model (global)</th><td>Selects a Chat Completions model for future requests through this relay.</td></tr>
         <tr><th scope="row">Copy Base URL</th><td>Copies exactly <code>http://127.0.0.1:8788</code>.</td></tr>
         <tr><th scope="row">Open Log</th><td>Opens <code>~/Library/Logs/oc-relay.log</code>. The control is disabled when the file does not exist.</td></tr>
         <tr><th scope="row">Quit</th><td>Closes RelayKey, leaving the relay in its current state.</td></tr>
       </tbody>
     </table>
+
+    <h2 id="model-picker">Choose a model</h2>
+    <p>Open <strong>Model (global)</strong> and choose a model. The checkmark appears after the relay confirms the change. The choice affects future requests from every client using this relay, including later turns of an existing LM Studio chat. It does not change LM Studio's visible Custom Model setting or interrupt a response already streaming.</p>
+    <p>Choose <strong>Use client model</strong> to return to the model sent by LM Studio. The choice persists across relay restarts. This menu lists only models that OpenCode Go documents for Chat Completions; listing a model does not confirm access on your account. See the <a href="https://opencode.ai/docs/go/#endpoints">Go endpoint table</a>.</p>
 
     <h2 id="troubleshooting">Troubleshooting</h2>
     <table>
@@ -61,6 +67,8 @@
         <tr><th scope="row">Relay Unhealthy</th><td>Choose <strong>Refresh</strong>. If it remains unhealthy, check the service with the status command below and inspect the local log using <strong>Open Log</strong>.</td></tr>
         <tr><th scope="row">Start, Stop, or Restart Failed · Exit N</th><td>Choose <strong>Refresh</strong> to check the current state. If the action still fails, check the service status and local log. A timeout may appear as exit 124.</td></tr>
         <tr><th scope="row">Open Log is disabled</th><td>The log file does not exist at <code>~/Library/Logs/oc-relay.log</code>. Check that the relay CLI is installed and has been run.</td></tr>
+        <tr><th scope="row">Model menu says Unavailable</th><td>Start the relay and install a version of <code>oc-relay</code> with model-selection support. The menu stays unavailable with older versions or invalid selection state.</td></tr>
+        <tr><th scope="row">Model change failed</th><td>Choose <strong>Refresh</strong> and check the selected ID with <code>oc-relay model show --json</code>. The menu does not show a new choice until the relay confirms it.</td></tr>
       </tbody>
     </table>
     <p>To check the service without printing recent log lines:</p>
